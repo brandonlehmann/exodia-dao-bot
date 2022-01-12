@@ -61,6 +61,7 @@ export default {
         const result = new Map<string, {name: string, bond: DAO.Bond}>();
 
         const bond_addresses = await redeemHelper.getBonds(maxBonds);
+        bond_addresses.push('0x86e21db31c154ae777e0c126999e89df0c01d9fa');
 
         for (const contract_address of bond_addresses) {
             const attempt = async (): Promise<void> => {
@@ -106,6 +107,6 @@ export default {
         return result;
     },
     compoundRate: (rate: number, days = 1): number => {
-        return Math.pow(1 + rate, 3 * days) - 1;
+        return Math.pow(1 + rate, 3.42 * days) - 1;
     }
 };
