@@ -32,7 +32,7 @@
   },
   "homepage": "https://github.com/brandonlehmann/exodia-dao-bot#readme",
   "dependencies": {
-    "@brandonlehmann/ethers-providers": "^0.0.13",
+    "@brandonlehmann/ethers-providers": "^0.0.15",
     "@turtlepay/logger": "^0.0.6",
     "@types/node-fetch": "2",
     "@types/numeral": "^2.0.2",

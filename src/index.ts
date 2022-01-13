@@ -18,7 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-import { FantomScanProvider, DAO, ethers, BigNumber, TimeTracker } from '@brandonlehmann/ethers-providers';
+import {
+    FantomScanProvider,
+    DAO,
+    ethers,
+    DAOInformationHelper
+} from '@brandonlehmann/ethers-providers';
 import { Metronome } from 'node-metronome';
 import Logger from '@turtlepay/logger';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
@@ -27,7 +32,7 @@ import Tools from './tools';
 
 config();
 
-const SECONDS_IN_A_DAY = 60 * 60 * 24;
+const DAO_INFORMATION_HELPER = process.env.DAO_INFORMATION_HELPER || '0x260A5367c0e742a1fdE32cDB13973F67c92149Ed';
 const myStakingWallet = process.env.DAO_WALLET_ADDRESS || undefined;
 const defaultWalletFilename = process.env.BOT_WALLET_FILENAME || 'token.wallet';
 const defaultWalletPassword = process.env.BOT_WALLET_PASSWORD || '';
@@ -39,6 +44,7 @@ const STAKING_CONTRACT = process.env.STAKING_CONTRACT || '0x8b8d40f98a2f14e2dd97
 const REDEEM_HELPER = process.env.REDEEM_HELPER || '0x9d1530475b6282bd92da5628e36052f70c56a208';
 const TOKEN_SYMBOL = process.env.TOKEN_SYMBOL || 'EXOD';
 const STAKED_TOKEN_SYMBOL = process.env.STAKED_TOKEN_SYMBOL || 'sEXOD';
+const ADDITIONAL_BONDS = ['0x86e21db31c154ae777e0c126999e89df0c01d9fa'];
 
 if (!myStakingWallet) {
     Logger.error('---------------------------------------------------------------------------------');
@@ -105,18 +111,18 @@ const RPCProvider = new ethers.providers.JsonRpcProvider('https://rpc.ftm.tools'
 
     Logger.warn('---------------------------------------------------------------------------------');
     Logger.warn('');
-    Logger.warn('For this bot to automatically claim and stake rebases on your behalf, you must');
+    Logger.warn('For this bot to automatically claim and stake bonds on your behalf, you must');
     Logger.warn('fund it with some FTM so that it can send transactions that will claim and stake');
-    Logger.warn('your bonds. You do not have to give it much, but given that it will send three');
+    Logger.warn('your bonds. You do not have to give it much, but given that it will send about three');
     Logger.warn('transactions a day, it may be wise to make sure that the bot wallet has');
     Logger.warn('1 FTM available and top it up ever day or so.');
     Logger.warn('');
     Logger.warn('Please make sure that you have funded this address with FTM');
     Logger.warn('%s', wallet.address);
-    Logger.warn('It current has %s FTM available', ethers.utils.formatEther(await wallet.getBalance()));
+    Logger.warn('It currently has %s FTM available', ethers.utils.formatEther(await wallet.getBalance()));
     Logger.warn('');
     Logger.warn('If you find this bot useful, please consider funding my coffee addiction');
-    Logger.warn('I gladly accept FTM, HEC, sHEC, wsHEC, EXOD, sEXOD etc to: ');
+    Logger.warn('I gladly accept FTM, EXOD, sEXOD, wsEXOD, HEC, sHEC, wsHEC etc to: ');
     Logger.warn('0x3F1066f18EdB21aC6dB63630C8241400B7FB0f06');
     Logger.warn('');
     Logger.warn('---------------------------------------------------------------------------------');
@@ -125,120 +131,97 @@ const RPCProvider = new ethers.providers.JsonRpcProvider('https://rpc.ftm.tools'
 
     const helper = await provider.load_contract(DAO.BondInformationHelper, BOND_INFORMATION_HELPER);
 
-    Logger.info('Loaded BondInformation helper from: %s', BOND_INFORMATION_HELPER);
+    Logger.info('Loaded Bond Information Helper from: %s', BOND_INFORMATION_HELPER);
 
-    const timetracker = await provider.load_contract(TimeTracker, BLOCK_TIME_TRACKER);
+    const DAOhelper = await provider.load_contract(DAOInformationHelper, DAO_INFORMATION_HELPER);
 
-    await timetracker.connect(RPCProvider);
-
-    Logger.info('Loaded Block Time Tracker from: %s', BLOCK_TIME_TRACKER);
-
-    const stakedToken = await provider.load_contract(DAO.StakedToken, STAKED_TOKEN_CONTRACT);
-
-    await stakedToken.connect(RPCProvider);
-
-    Logger.info('Loaded Staked Token contract from: %s', STAKED_TOKEN_CONTRACT);
-
-    const staking = await provider.load_contract(DAO.Staking, STAKING_CONTRACT, TOKEN_SYMBOL, STAKED_TOKEN_SYMBOL);
-
-    await staking.connectWallet(wallet);
-
-    Logger.info('Loaded staking contract from: %s', STAKING_CONTRACT);
+    Logger.info('Loaded DAO Information Helper from: %s', DAO_INFORMATION_HELPER);
 
     const redeemHelper = await provider.load_contract(DAO.RedeemHelper, REDEEM_HELPER);
 
     await redeemHelper.connect(wallet);
 
-    Logger.info('Loaded redeem helper contract from: %s', REDEEM_HELPER);
+    Logger.info('Loaded Redeem Helper from: %s', REDEEM_HELPER);
 
     Logger.info('---------------------------------------------------------------------------------');
 
     Logger.info('Fetching all Bond ABIs and loading them');
 
-    const bonds = await Tools.getBonds(provider, redeemHelper, helper);
+    const bonds = await Tools.getBonds(provider, redeemHelper, helper, wallet, undefined, ADDITIONAL_BONDS);
 
     Logger.info('Loaded %s Bond ABIs', bonds.size);
-
-    const stakedCirculatingSupply = async (): Promise<BigNumber> => {
-        return stakedToken.circulatingSupply();
-    };
 
     Logger.info('---------------------------------------------------------------------------------');
     Logger.info('------------------------   STARTING BOT WATCH LOOP   ----------------------------');
     Logger.info('---------------------------------------------------------------------------------');
 
     timer.on('tick', async () => {
-        const blockNumber = await staking.contract.provider.getBlockNumber();
-
-        const epoch = await staking.epoch();
-
-        const circulatingSupply = (await stakedCirculatingSupply()).toNumber();
-
-        const stakingReward = epoch.distribute.toNumber();
-
-        const epochLength = epoch._length.toNumber();
-
-        const bps = await timetracker.average();
-
-        const blocksPerDay = bps * SECONDS_IN_A_DAY;
-
-        const epochsPerDay = blocksPerDay / epochLength;
-
-        const rebaseRate = stakingReward / circulatingSupply;
+        const info = await Tools.getLoopData(
+            DAOhelper,
+            STAKING_CONTRACT,
+            STAKED_TOKEN_CONTRACT,
+            BLOCK_TIME_TRACKER,
+            myStakingWallet
+        );
 
         const rates = {
-            daily: Tools.compoundRate(rebaseRate, 1, epochsPerDay),
-            fourDay: Tools.compoundRate(rebaseRate, 4, epochsPerDay),
-            fiveDay: Tools.compoundRate(rebaseRate, 5, epochsPerDay),
-            weekly: Tools.compoundRate(rebaseRate, 7, epochsPerDay),
-            monthly: Tools.compoundRate(rebaseRate, 30, epochsPerDay),
-            yearly: Tools.compoundRate(rebaseRate, 365, epochsPerDay)
+            daily: Tools.compoundRate(info.rebaseRate, 1, info.epochsPerDay),
+            fourDay: Tools.compoundRate(info.rebaseRate, 4, info.epochsPerDay),
+            fiveDay: Tools.compoundRate(info.rebaseRate, 5, info.epochsPerDay),
+            weekly: Tools.compoundRate(info.rebaseRate, 7, info.epochsPerDay),
+            monthly: Tools.compoundRate(info.rebaseRate, 30, info.epochsPerDay),
+            yearly: Tools.compoundRate(info.rebaseRate, 365, info.epochsPerDay)
         };
-
-        const epochNumber = epoch.number.toNumber();
-
-        const endBlock = epoch.endBlock.toNumber();
-
-        const delta = endBlock - blockNumber;
 
         const bondPayout = await Tools.checkBonds(bonds, myStakingWallet);
 
-        Logger.info('Block: %s => Epoch End: %s in %s', blockNumber, endBlock, Tools.secondsToHuman(delta));
-        Logger.info('My Balance: %s FTM', ethers.utils.formatEther(await wallet.getBalance()));
-        Logger.info('My Claimable Bonds: %s %s', ethers.utils.formatUnits(bondPayout, 'gwei'), TOKEN_SYMBOL);
+        Logger.info('---------------------------------------------------------------------------------');
+        Logger.info('---------------------------   BOT CHECK INTERVAL   ------------------------------');
+        Logger.info('---------------------------------------------------------------------------------');
+        Logger.info('Status');
+        Logger.info('');
+        Logger.info('\t\tBlock             : %s => Epoch End: %s in ~%s', info.blockNumber, info.endBlock, Tools.secondsToHuman(info.delta));
+        Logger.info('\t\tBot Wallet        : %s', wallet.address);
+        Logger.info('\t\tBot Balance       : %s FTM', ethers.utils.formatEther(await wallet.getBalance()));
+        Logger.info('');
+        Logger.info('\t\tStaker Address    : %s', myStakingWallet);
+        Logger.info('\t\tMy Claimable Bonds: %s %s', bondPayout, TOKEN_SYMBOL);
+        Logger.info('\t\tMy Staked Balance : %s %s', info.stakedTokenBalance, STAKED_TOKEN_SYMBOL);
+        Logger.info('');
         Logger.info('---------------------------------------------------------------------------------');
         Logger.info('Current Rates');
         Logger.info('');
-        Logger.info('\t\tEpoch Day: %s', Tools.formatNumber(epochsPerDay));
-        Logger.info('\t\tEpoch    : %s%', Tools.formatPercent(rebaseRate));
-        Logger.info('\t\tDaily    : %s%', Tools.formatPercent(rates.daily));
-        Logger.info('\t\tFour Day : %s%', Tools.formatPercent(rates.fourDay));
-        Logger.info('\t\tFive Day : %s%', Tools.formatPercent(rates.fiveDay));
-        Logger.info('\t\tWeekly   : %s%', Tools.formatPercent(rates.weekly));
-        Logger.info('\t\tMonthly  : %s%', Tools.formatPercent(rates.monthly));
-        Logger.info('\t\tYearly   : %s%', Tools.formatPercent(rates.yearly));
+        Logger.info('\t\tCurrent Index : %s', Tools.formatNumber(info.index));
+        Logger.info('\t\tEpoch Day     : %s', Tools.formatNumber(info.epochsPerDay));
+        Logger.info('\t\tEpoch         : %s%', Tools.formatPercent(info.rebaseRate));
+        Logger.info('\t\tDaily         : %s%', Tools.formatPercent(rates.daily));
+        Logger.info('\t\tFour Day      : %s%', Tools.formatPercent(rates.fourDay));
+        Logger.info('\t\tFive Day      : %s%', Tools.formatPercent(rates.fiveDay));
+        Logger.info('\t\tWeekly        : %s%', Tools.formatPercent(rates.weekly));
+        Logger.info('\t\tMonthly       : %s%', Tools.formatPercent(rates.monthly));
+        Logger.info('\t\tYearly        : %s%', Tools.formatPercent(rates.yearly));
         Logger.info('');
         Logger.info('---------------------------------------------------------------------------------');
 
         // if we're less than 5 minutes away and we haven't don't this already...
-        if (delta <= 5 * 60 && !epochs.has(epochNumber) && bondPayout.gt(BigNumber.from(0))) {
+        if (info.delta <= 5 * 60 && !epochs.has(info.epochNumber) && bondPayout > 0) {
             timer.toggle();
 
             Logger.warn('Trying to Redeem & Stake all Bonds');
 
             try {
-                const tx = await redeemHelper.redeemAll(myStakingWallet, true);
+                const receipts = await Tools.redeemBonds(redeemHelper, myStakingWallet, bonds, ADDITIONAL_BONDS);
 
-                Logger.warn('Waiting for transaction: %s', tx.hash);
+                for (const receipt of receipts) {
+                    epochs.set(info.epochNumber, receipt.blockNumber);
 
-                const receipt = await tx.wait(2);
-
-                epochs.set(epochNumber, receipt.blockNumber);
-
-                Logger.info('Redeemed & Staked All via %s in block %s', receipt.transactionHash, receipt.blockNumber);
-            } catch {} finally {
-                timer.toggle();
+                    Logger.info('Redeemed & Staked via %s in block %s', receipt.transactionHash, receipt.blockNumber);
+                }
+            } catch (e: any) {
+                Logger.error('Error redeeming & staking bonds: %s', e.toString());
             }
+
+            timer.toggle();
         }
     });
 
