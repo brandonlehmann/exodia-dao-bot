@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-import { FantomScanProvider, DAO, ethers, BigNumber } from '@brandonlehmann/ethers-providers';
+import { FantomScanProvider, DAO, ethers, BigNumber, TimeTracker } from '@brandonlehmann/ethers-providers';
 import { Metronome } from 'node-metronome';
 import Logger from '@turtlepay/logger';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
@@ -27,11 +27,13 @@ import Tools from './tools';
 
 config();
 
+const SECONDS_IN_A_DAY = 60 * 60 * 24;
 const myStakingWallet = process.env.DAO_WALLET_ADDRESS || undefined;
 const defaultWalletFilename = process.env.BOT_WALLET_FILENAME || 'token.wallet';
 const defaultWalletPassword = process.env.BOT_WALLET_PASSWORD || '';
 const ftmScanAPIKey = process.env.FTM_SCAN_API_KEY || undefined;
 const BOND_INFORMATION_HELPER = process.env.BOND_INFORMATION_HELPER || '0xd915Aff2F6AFB96F4d8765C663b60c8a5AdC6729';
+const BLOCK_TIME_TRACKER = process.env.BLOCK_TIME_TRACKER || '0x706e05D2b47cc6B1fb615EE76DD3789d2329E22e';
 const STAKED_TOKEN_CONTRACT = process.env.STAKED_TOKEN_CONTARCT || '0x8de250c65636ef02a75e4999890c91cecd38d03d';
 const STAKING_CONTRACT = process.env.STAKING_CONTRACT || '0x8b8d40f98a2f14e2dd972b3f2e2a2cc227d1e3be';
 const REDEEM_HELPER = process.env.REDEEM_HELPER || '0x9d1530475b6282bd92da5628e36052f70c56a208';
@@ -125,6 +127,12 @@ const RPCProvider = new ethers.providers.JsonRpcProvider('https://rpc.ftm.tools'
 
     Logger.info('Loaded BondInformation helper from: %s', BOND_INFORMATION_HELPER);
 
+    const timetracker = await provider.load_contract(TimeTracker, BLOCK_TIME_TRACKER);
+
+    await timetracker.connect(RPCProvider);
+
+    Logger.info('Loaded Block Time Tracker from: %s', BLOCK_TIME_TRACKER);
+
     const stakedToken = await provider.load_contract(DAO.StakedToken, STAKED_TOKEN_CONTRACT);
 
     await stakedToken.connect(RPCProvider);
@@ -168,15 +176,23 @@ const RPCProvider = new ethers.providers.JsonRpcProvider('https://rpc.ftm.tools'
 
         const stakingReward = epoch.distribute.toNumber();
 
+        const epochLength = epoch._length.toNumber();
+
+        const bps = await timetracker.average();
+
+        const blocksPerDay = bps * SECONDS_IN_A_DAY;
+
+        const epochsPerDay = blocksPerDay / epochLength;
+
         const rebaseRate = stakingReward / circulatingSupply;
 
         const rates = {
-            daily: Tools.compoundRate(rebaseRate, 1),
-            fourDay: Tools.compoundRate(rebaseRate, 4),
-            fiveDay: Tools.compoundRate(rebaseRate, 5),
-            weekly: Tools.compoundRate(rebaseRate, 7),
-            monthly: Tools.compoundRate(rebaseRate, 30),
-            yearly: Tools.compoundRate(rebaseRate, 365)
+            daily: Tools.compoundRate(rebaseRate, 1, epochsPerDay),
+            fourDay: Tools.compoundRate(rebaseRate, 4, epochsPerDay),
+            fiveDay: Tools.compoundRate(rebaseRate, 5, epochsPerDay),
+            weekly: Tools.compoundRate(rebaseRate, 7, epochsPerDay),
+            monthly: Tools.compoundRate(rebaseRate, 30, epochsPerDay),
+            yearly: Tools.compoundRate(rebaseRate, 365, epochsPerDay)
         };
 
         const epochNumber = epoch.number.toNumber();
@@ -193,13 +209,14 @@ const RPCProvider = new ethers.providers.JsonRpcProvider('https://rpc.ftm.tools'
         Logger.info('---------------------------------------------------------------------------------');
         Logger.info('Current Rates');
         Logger.info('');
-        Logger.info('\t\tEpoch   : %s%', Tools.formatPercent(rebaseRate));
-        Logger.info('\t\tDaily   : %s%', Tools.formatPercent(rates.daily));
-        Logger.info('\t\tFour Day: %s%', Tools.formatPercent(rates.fourDay));
-        Logger.info('\t\tFive Day: %s%', Tools.formatPercent(rates.fiveDay));
-        Logger.info('\t\tWeekly  : %s%', Tools.formatPercent(rates.weekly));
-        Logger.info('\t\tMonthly : %s%', Tools.formatPercent(rates.monthly));
-        Logger.info('\t\tYearly  : %s%', Tools.formatPercent(rates.yearly));
+        Logger.info('\t\tEpoch Day: %s', Tools.formatNumber(epochsPerDay));
+        Logger.info('\t\tEpoch    : %s%', Tools.formatPercent(rebaseRate));
+        Logger.info('\t\tDaily    : %s%', Tools.formatPercent(rates.daily));
+        Logger.info('\t\tFour Day : %s%', Tools.formatPercent(rates.fourDay));
+        Logger.info('\t\tFive Day : %s%', Tools.formatPercent(rates.fiveDay));
+        Logger.info('\t\tWeekly   : %s%', Tools.formatPercent(rates.weekly));
+        Logger.info('\t\tMonthly  : %s%', Tools.formatPercent(rates.monthly));
+        Logger.info('\t\tYearly   : %s%', Tools.formatPercent(rates.yearly));
         Logger.info('');
         Logger.info('---------------------------------------------------------------------------------');
 

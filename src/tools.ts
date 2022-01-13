@@ -33,6 +33,11 @@ export default {
         return new Date(seconds * 1000).toISOString()
             .substr(11, 8);
     },
+    formatNumber: (value: number): string => {
+        return Numeral(value)
+            .format('0,0.0000')
+            .padStart(14, ' ');
+    },
     formatPercent: (value: number | BigNumber): string => {
         if (typeof value === 'undefined') {
             return Numeral(0)
@@ -106,7 +111,7 @@ export default {
 
         return result;
     },
-    compoundRate: (rate: number, days = 1): number => {
-        return Math.pow(1 + rate, 3.42 * days) - 1;
+    compoundRate: (rate: number, days = 1, epochsPerDay = 1): number => {
+        return Math.pow(1 + rate, epochsPerDay * days) - 1;
     }
 };

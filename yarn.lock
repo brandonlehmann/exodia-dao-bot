@@ -23,10 +23,10 @@
     chalk "^2.0.0"
     js-tokens "^4.0.0"
 
-"@brandonlehmann/ethers-providers@^0.0.12":
-  version "0.0.12"
-  resolved "https://registry.yarnpkg.com/@brandonlehmann/ethers-providers/-/ethers-providers-0.0.12.tgz#e6f5b2bd43dc9982beb484b5ad9368285fe52fb5"
-  integrity sha512-jqLJjXAy09Ks5PKFhQ9wzYw9ctfUh1XICR1D10ywgoBAzkidQxgyZw7iT1TfJmNA/bwJojSeFYgyY6F667Rb8w==
+"@brandonlehmann/ethers-providers@^0.0.13":
+  version "0.0.13"
+  resolved "https://registry.yarnpkg.com/@brandonlehmann/ethers-providers/-/ethers-providers-0.0.13.tgz#e3c161e042d42ff7d532fc2ce83ac73896d2cc88"
+  integrity sha512-QZObskXJBlMmUqbBHOwnsaK/5L6HLuPtHUhh8g36r5L1JjNjRe7QLSvGDrQuoO3rFejTgf0MxeZVnw5GZOFZDw==
   dependencies:
     "@types/node-fetch" "2"
     ethers "^5.5.1"
