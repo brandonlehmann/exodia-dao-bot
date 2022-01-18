@@ -50,4 +50,4 @@ transactions a day, it may be wise to make sure that the bot wallet has
 ### Donations
 
 If you find this bot useful, please consider funding my coffee addiction
-I gladly accept FTM, HEC, sHEC, wsHEC, etc to: `0x3F1066f18EdB21aC6dB63630C8241400B7FB0f06`
+I gladly accept FTM, EXOD, sEXOD, wsEXOD, etc to: `0x3F1066f18EdB21aC6dB63630C8241400B7FB0f06`
