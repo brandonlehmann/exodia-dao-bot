@@ -44,7 +44,7 @@ const STAKING_CONTRACT = process.env.STAKING_CONTRACT || '0x8b8d40f98a2f14e2dd97
 const REDEEM_HELPER = process.env.REDEEM_HELPER || '0x9d1530475b6282bd92da5628e36052f70c56a208';
 const TOKEN_SYMBOL = process.env.TOKEN_SYMBOL || 'EXOD';
 const STAKED_TOKEN_SYMBOL = process.env.STAKED_TOKEN_SYMBOL || 'sEXOD';
-const ADDITIONAL_BONDS = ['0x86e21db31c154ae777e0c126999e89df0c01d9fa'];
+const ADDITIONAL_BONDS: string[] = [];
 
 if (!myStakingWallet) {
     Logger.error('---------------------------------------------------------------------------------');
@@ -122,7 +122,7 @@ const RPCProvider = new ethers.providers.JsonRpcProvider('https://rpc.ftm.tools'
     Logger.warn('It currently has %s FTM available', ethers.utils.formatEther(await wallet.getBalance()));
     Logger.warn('');
     Logger.warn('If you find this bot useful, please consider funding my coffee addiction');
-    Logger.warn('I gladly accept FTM, EXOD, sEXOD, wsEXOD, HEC, sHEC, wsHEC etc to: ');
+    Logger.warn('I gladly accept FTM, EXOD, sEXOD, wsEXOD etc to: ');
     Logger.warn('0x3F1066f18EdB21aC6dB63630C8241400B7FB0f06');
     Logger.warn('');
     Logger.warn('---------------------------------------------------------------------------------');
