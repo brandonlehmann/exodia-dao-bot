@@ -93,6 +93,10 @@ export default class Tools {
     ): Promise<Bonds> {
         const result: Bonds = new Map<string, {name: string, bond: DAO.Bond, redeemHelper: boolean}>();
 
+        Logger.info('---------------------------------------------------------------------------------');
+        Logger.info('Fetching all Bond ABIs and loading them');
+        Logger.info('');
+
         const bond_addresses = await redeemHelper.getBonds(maxBonds);
         for (const bond of additionalBonds) {
             bond_addresses.push(bond);
@@ -135,6 +139,10 @@ export default class Tools {
 
             await attempt();
         }
+
+        Logger.info('');
+        Logger.info('Loaded %s Bond ABIs', result.size);
+        Logger.info('---------------------------------------------------------------------------------');
 
         return result;
     }

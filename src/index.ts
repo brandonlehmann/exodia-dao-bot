@@ -103,7 +103,10 @@ const RPCProvider = new ethers.providers.JsonRpcProvider('https://rpc.ftm.tools'
 (async () => {
     const epochs = new Map<number, number>();
 
-    const timer = new Metronome(60 * 1000, true);
+    const timer = new Metronome(60 * 1000, true); // every minute
+
+    // set the timer to check for new bonds every 30 minutes
+    const bondReloadTimer = new Metronome(30 * 60 * 1000, true);
 
     const provider = new FantomScanProvider(ftmScanAPIKey);
 
@@ -143,17 +146,15 @@ const RPCProvider = new ethers.providers.JsonRpcProvider('https://rpc.ftm.tools'
 
     Logger.info('Loaded Redeem Helper from: %s', REDEEM_HELPER);
 
-    Logger.info('---------------------------------------------------------------------------------');
-
-    Logger.info('Fetching all Bond ABIs and loading them');
-
-    const bonds = await Tools.getBonds(provider, redeemHelper, helper, wallet, undefined, ADDITIONAL_BONDS);
-
-    Logger.info('Loaded %s Bond ABIs', bonds.size);
+    let bonds = await Tools.getBonds(provider, redeemHelper, helper, wallet, undefined, ADDITIONAL_BONDS);
 
     Logger.info('---------------------------------------------------------------------------------');
     Logger.info('------------------------   STARTING BOT WATCH LOOP   ----------------------------');
     Logger.info('---------------------------------------------------------------------------------');
+
+    bondReloadTimer.on('tick', async () => {
+        bonds = await Tools.getBonds(provider, redeemHelper, helper, wallet, undefined, ADDITIONAL_BONDS);
+    });
 
     timer.on('tick', async () => {
         const info = await Tools.getLoopData(
